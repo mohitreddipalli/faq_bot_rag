@@ -96,4 +96,3 @@ Why this helps
 - Accelerates debugging and testing by providing deterministic keys and brief summaries for each chunk.
 - Enables simple UI features like "show source" and "jump to original document" without extra indexing work.
 
-If you want, I can also run the tests or expand this README with examples and command outputs.
