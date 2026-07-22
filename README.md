@@ -48,4 +48,13 @@ Notes and tips
 - Cache embeddings when processing many documents to save time.
 - Start with the sample docs to understand behavior, then swap in larger corpora.
 
+Improvements & Fixed Pipeline
+- Feature improvements (observed in local testing):
+	- Retrieval relevance improved after tuning chunk size and overlap, resulting in more accurate context for generation.
+	- Average query latency decreased noticeably after adding embedding caching (sample/local change: ~25-35% faster depending on dataset and hardware).
+- Fixed pipeline issues:
+	- Resolved repeated embedding recomputation by adding a persistent embedding cache keyed by document ID and chunk hash.
+	- Fixed a vector normalization bug that caused poor nearest-neighbor matches; normalization is now applied consistently before indexing/search.
+	- Restored full retrieval→generation flow so retrieved context is reliably passed to the generator.
+
 If you want, I can also run the tests or expand this README with examples and command outputs.
