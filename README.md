@@ -91,7 +91,7 @@ How it's used
 Where it lives in the code
 - The card is produced during chunking/extraction; see `src/chunk.py` and `src/extract.py` for the implementation notes and where `doc_id`/`chunk_hash` are computed.
 
-Why this helps
+Why this helps:
 - Improves user trust by showing source attribution.
 - Accelerates debugging and testing by providing deterministic keys and brief summaries for each chunk.
 - Enables simple UI features like "show source" and "jump to original document" without extra indexing work.
