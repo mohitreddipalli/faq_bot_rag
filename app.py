@@ -1,8 +1,6 @@
 import os
 import streamlit as st
-import numpy as np
 from datetime import datetime
-import math
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -136,8 +134,8 @@ if st.sidebar.button("Index Pasted Text"):
         st.sidebar.error("No text to index. Paste your document text into the textarea first.")
     else:
         try:
-            chunk_size = int(os.getenv("CHUNK_SIZE", 250))
-            overlap = int(os.getenv("CHUNK_OVERLAP", 50))
+            chunk_size = int(os.getenv("CHUNK_SIZE", 180))
+            overlap = int(os.getenv("CHUNK_OVERLAP", 30))
             chunks = chunk_text(content, chunk_size=chunk_size, overlap=overlap)
 
             if st.session_state.embedding_manager is None:
@@ -168,7 +166,6 @@ st.sidebar.markdown("### ⚙️ RAG Configuration")
 # Use environment variables to configure these values when launching the app.
 threshold = float(os.getenv("SIMILARITY_THRESHOLD", 0.25))
 top_k = int(os.getenv("TOP_K", 3))
-provider = os.getenv("LLM_PROVIDER", "auto")
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🧹 Clear Session & History", use_container_width=True):
@@ -186,8 +183,8 @@ if uploaded_file is not None:
         with st.spinner(f"Extracting & Indexing '{current_filename}'..."):
             try:
                 raw_text = extract_text_from_file(uploaded_file, current_filename)
-                chunk_size = int(os.getenv("CHUNK_SIZE", 250))
-                overlap = int(os.getenv("CHUNK_OVERLAP", 50))
+                chunk_size = int(os.getenv("CHUNK_SIZE", 180))
+                overlap = int(os.getenv("CHUNK_OVERLAP", 30))
                 chunks = chunk_text(raw_text, chunk_size=chunk_size, overlap=overlap)
                 
                 if st.session_state.embedding_manager is None:
@@ -228,30 +225,8 @@ doc = st.session_state.document_data
 
 if doc is None:
     st.info("👈 Please upload a PDF or TXT file using the sidebar to begin.")
-    
-    if st.button("📄 Or click here to load the Sample Policy Document"):
-        sample_path = "data/sample_docs/sample_policy.txt"
-        if os.path.exists(sample_path):
-            with open(sample_path, "r") as f:
-                content = f.read()
-            chunks = chunk_text(content, chunk_size=250, overlap=50)
-            if st.session_state.embedding_manager is None:
-                st.session_state.embedding_manager = EmbeddingManager()
-            embeddings = st.session_state.embedding_manager.fit_and_embed_chunks(chunks)
-            file_size_bytes = os.path.getsize(sample_path)
-            uploaded_at = datetime.now()
-
-            st.session_state.document_data = {
-                "filename": "sample_policy.txt",
-                "text": content,
-                "chunks": chunks,
-                "embeddings": embeddings,
-                "file_size_bytes": file_size_bytes,
-                "file_type": "txt",
-                "uploaded_at": uploaded_at.isoformat(),
-            }
-            st.session_state.processing_failed = False
-            st.rerun()
+    if not os.getenv("GROQ_API_KEY"):
+        st.warning("Configure GROQ_API_KEY in your .env file before asking questions.")
 else:
     col1, col2, col3 = st.columns(3)
     col1.metric("Indexed Document", doc["filename"])
@@ -286,47 +261,41 @@ else:
 
         with st.chat_message("assistant"):
             with st.spinner("Retrieving relevant context & generating grounded answer..."):
-                query_vec = st.session_state.embedding_manager.embed_query(user_question)
+                try:
+                    query_vec = st.session_state.embedding_manager.embed_query(user_question)
 
-                retrieval = retrieve_top_k(
-                    query_vec=query_vec,
-                    chunk_vecs=doc["embeddings"],
-                    chunks=doc["chunks"],
-                    top_k=top_k,
-                    threshold=threshold
-                )
-                # Provide the original query text so retrieve_top_k can
-                # use a token-overlap fallback if vector similarities are
-                # all zero (e.g., TF-IDF produced empty vectors).
-                retrieval = retrieve_top_k(
-                    query_vec=query_vec,
-                    chunk_vecs=doc["embeddings"],
-                    chunks=doc["chunks"],
-                    top_k=top_k,
-                    threshold=threshold,
-                    query_text=user_question
-                )
+                    retrieval = retrieve_top_k(
+                        query_vec=query_vec,
+                        chunk_vecs=doc["embeddings"],
+                        chunks=doc["chunks"],
+                        top_k=top_k,
+                        threshold=threshold,
+                        query_text=user_question
+                    )
 
-                answer = generate_answer(
-                    query=user_question,
-                    retrieved_results=retrieval["results"],
-                    is_relevant=retrieval["is_relevant"],
-                    provider=provider
-                )
+                    answer = generate_answer(
+                        query=user_question,
+                        retrieved_results=retrieval["results"],
+                        is_relevant=retrieval["is_relevant"],
+                    )
 
-                st.markdown(answer)
+                    st.markdown(answer)
 
-                if retrieval["results"]:
-                    with st.expander("🔍 View Retrieved Source Chunks"):
-                        for item in retrieval["results"]:
-                            c = item["chunk"]
-                            score = item["score"]
-                            st.markdown(f"**Chunk #{c['id']}** | *Similarity Score: `{score:.4f}`*")
-                            st.caption(c["text"])
-                            st.divider()
+                    if retrieval["results"]:
+                        with st.expander("🔍 View Retrieved Source Chunks"):
+                            for item in retrieval["results"]:
+                                c = item["chunk"]
+                                score = item["score"]
+                                st.markdown(f"**Chunk #{c['id']}** | *Similarity Score: `{score:.4f}`*")
+                                st.caption(c["text"])
+                                st.divider()
+                except Exception as exc:
+                    message = f"Unable to generate a live answer: {exc}"
+                    st.error(message)
+                    answer = message
 
         st.session_state.chat_history.append({
             "role": "assistant",
             "content": answer,
-            "retrieved_results": retrieval["results"]
+            "retrieved_results": retrieval["results"] if "retrieval" in locals() else []
         })
